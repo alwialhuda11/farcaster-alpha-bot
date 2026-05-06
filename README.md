@@ -52,27 +52,29 @@ gh repo create my-farcaster-alpha-bot --private --source=. --push
 
 Bot punya 3 source pluggable. Pilih salah satu:
 
-#### a) `xcancel` (gratis, default — butuh whitelist sekali)
+#### a) `apify` ⭐ **RECOMMENDED untuk GitHub Actions** (~$5/bulan free credits = ~12k tweets/bulan)
 
-xcancel.com adalah Nitter mirror yg masih jalan. Mereka anti-scraping, jadi RSS feed harus di-whitelist:
+Reliable dari IP manapun (termasuk runner GitHub Actions yang IP-nya berubah-ubah).
 
-1. Push repo dulu, commit kosong gak masalah.
-2. Trigger workflow `post-cast` manual lewat tab **Actions** dengan `dry_run=true`. Logs akan menampilkan token whitelist (32+ hex chars) dari xcancel.
-   - Atau jalankan `python -m src.main -vv --dry-run` lokal untuk dapat token-nya.
-3. Email **`rss [AT] xcancel [DOT] com`** dengan token tsb dan minta whitelist (sekali doang).
-4. Setelah whitelisted (biasanya beberapa jam), bot otomatis dapet feed beneran.
-
-> Ini limitasi xcancel, bukan bot-nya. Kalau kamu pengen langsung jalan tanpa nunggu, pakai opsi `apify` di bawah.
-
-#### b) `apify` (sangat reliable, $5/bulan free credits)
-
-1. Sign up di https://apify.com → Settings → Integrations → API → copy token → simpan sebagai `APIFY_TOKEN`.
+1. Sign up di https://apify.com → Settings → Integrations → API → copy token → simpan sebagai `APIFY_TOKEN` di GitHub Secrets.
 2. Set repo variable `TWITTER_SOURCE=apify`.
-3. Default actor: `apidojo/tweet-scraper` (~$0.4/1k tweets). Free credits ($5) = ~12k tweets/bulan, jauh lebih dari cukup.
+3. Default actor: `apidojo/tweet-scraper` (~$0.4/1k tweets). Free credits ($5/bulan) = ~12k tweets, jauh lebih dari cukup untuk 10 post/hari.
+
+#### b) `xcancel` (gratis tapi butuh whitelist; cocok untuk run di server fixed-IP)
+
+⚠️ **Limitasi penting**: xcancel.com whitelist diikat ke IP yang dipakai. GitHub Actions runner pakai IP yang berubah-ubah tiap run, jadi praktis xcancel **tidak bisa dipakai di GitHub Actions**. Source ini cuma cocok kalau kamu run bot di VPS sendiri (cron) atau server lokal yang IP-nya tetap.
+
+Kalau setup di fixed-IP server:
+1. Run `python -m src.main -vv --dry-run --force --any-time` di server-nya (sekali aja).
+2. Logs akan kasih token whitelist (32+ hex chars).
+3. Email **`rss [AT] xcancel [DOT] com`** dengan token tsb dan minta whitelist.
+4. Tunggu beberapa jam sampai whitelisted, terus jalankan bot beneran.
 
 #### c) `fixture` (testing only)
 
-Set `TWITTER_SOURCE=fixture` & edit `data/fixture_tweets.json`. Bot akan baca dari file tsb. Berguna buat dry-run testing.
+Set `TWITTER_SOURCE=fixture` & edit `data/fixture_tweets.json`. Bot akan baca dari file tsb. Berguna buat dry-run testing tanpa network.
+
+> **TLDR**: kalau pakai GitHub Actions (default plan kita), pilih **`apify`**. Kalau punya VPS sendiri, boleh `xcancel` setelah whitelist.
 
 ### 5. Edit list akun
 
