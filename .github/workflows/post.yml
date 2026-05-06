@@ -42,7 +42,7 @@ jobs:
           NEYNAR_SIGNER_UUID: ${{ secrets.NEYNAR_SIGNER_UUID }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o-mini' }}
-          TWITTER_SOURCE: ${{ vars.TWITTER_SOURCE || 'xcancel' }}
+          TWITTER_SOURCE: ${{ vars.TWITTER_SOURCE || 'news_rss' }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           APIFY_ACTOR_ID: ${{ vars.APIFY_ACTOR_ID || 'apidojo/tweet-scraper' }}
           FARCASTER_CHANNEL_ID: ${{ vars.FARCASTER_CHANNEL_ID }}

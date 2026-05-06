@@ -73,9 +73,13 @@ def main() -> int:
         cfg.dry_run = True
     cfg.require_posting_creds()
 
-    if not cfg.accounts:
-        log.error("No accounts configured. Edit config/accounts.yml.")
+    if cfg.needs_accounts() and not cfg.accounts:
+        log.error(
+            "Source %r requires `accounts:` in config/accounts.yml.", cfg.twitter_source
+        )
         return 2
+    if cfg.twitter_source in ("news_rss", "news", "rss") and not cfg.feeds:
+        log.warning("No `feeds:` in config/accounts.yml; using built-in defaults.")
 
     now = datetime.now(UTC)
     if not args.any_time and not _within_active_hours(
@@ -93,16 +97,23 @@ def main() -> int:
         log.warning("Probability gate skip (P=%.2f).", cfg.post_probability)
         return 0
 
-    # 1) Fetch tweets.
+    # 1) Fetch source items.
     src_kwargs: dict = {}
     if cfg.twitter_source == "apify":
         src_kwargs = {"token": cfg.apify_token, "actor_id": cfg.apify_actor_id}
+    elif cfg.twitter_source in ("news_rss", "news", "rss") and cfg.feeds:
+        src_kwargs = {"feeds": cfg.feeds}
     source = build_source(cfg.twitter_source, **src_kwargs)
-    log.info("Fetching tweets via %s for %d accounts", source.name, len(cfg.accounts))
+    log.info(
+        "Fetching items via %s (accounts=%d, feeds=%d)",
+        source.name,
+        len(cfg.accounts),
+        len(cfg.feeds),
+    )
     tweets = source.fetch(cfg.accounts, cfg.lookback_hours)
-    log.info("Fetched %d tweets total", len(tweets))
+    log.info("Fetched %d items total", len(tweets))
     if not tweets:
-        log.warning("No tweets fetched. Check source credentials / whitelist.")
+        log.warning("No items fetched. Check source credentials / connectivity.")
         return 1
 
     # 2) Pick a candidate.
@@ -110,9 +121,9 @@ def main() -> int:
     posted_ids = set(state.keys())
     chosen = pick_tweet(tweets, posted_ids)
     if chosen is None:
-        log.warning("All %d tweets already posted. Nothing to do.", len(tweets))
+        log.warning("All %d items already posted. Nothing to do.", len(tweets))
         return 0
-    log.info("Picked tweet %s by @%s: %s", chosen.id, chosen.author, chosen.text[:120])
+    log.info("Picked item %s [%s]: %s", chosen.id, chosen.author, chosen.text[:120])
 
     # 3) Synthesize via LLM.
     rewriter = LLMRewriter(api_key=cfg.openai_api_key, model=cfg.openai_model)
@@ -130,7 +141,7 @@ def main() -> int:
 
     # 4) Publish.
     print("=" * 60)
-    print(f"SOURCE @{chosen.author}: {chosen.text}")
+    print(f"SOURCE [{chosen.author}]: {chosen.text}")
     print("-" * 60)
     print(f"CAST ({len(result.text)} chars):")
     print(result.text)

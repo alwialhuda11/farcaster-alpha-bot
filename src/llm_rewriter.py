@@ -21,9 +21,9 @@ Voice & format rules:
 - Reference token tickers as $TOKEN (uppercase ticker, lowercase prose around it).
 - Cite numbers/percentages/timeframes when present in the source ("up 24% in 6h", "tvl crossed 800m").
 - Never invent numbers, prices, or facts that aren't in the source. If unsure, drop the number.
-- Do not say "according to X" or quote tweets. Synthesize the alpha as your own observation.
-- Don't mention twitter, X, or that you're rewriting anything. You're not a bot in the prose.
-- If the source is just a meme, hot take, or has no real alpha, return the single word: SKIP.
+- Do not say "according to coindesk/decrypt/etc", do not quote, do not name news outlets or twitter handles. Synthesize the alpha as your own first-person observation.
+- Don't mention news, articles, twitter, X, RSS, or that you're rewriting anything. You're not a bot in the prose.
+- If the source has no real alpha (just opinion, recap, lifestyle, hot take, or pure speculation), return the single word: SKIP.
 - If the source is non-English, translate the alpha to English and follow all rules above.
 
 Output ONLY the post text or the literal word SKIP. No quotes, no preamble, no markdown.
@@ -44,13 +44,14 @@ class LLMRewriter:
 
     def synthesize(self, tweets: list[Tweet], max_length: int = 320) -> GenerationResult:
         if not tweets:
-            raise ValueError("LLMRewriter.synthesize: no source tweets")
+            raise ValueError("LLMRewriter.synthesize: no source items")
         # Build a compact source block for the prompt.
         lines = []
         for t in tweets[:5]:  # cap at 5 sources to keep token usage low
-            lines.append(f"@{t.author}: {t.text}")
+            lines.append(f"[{t.author}] {t.text}")
         user_msg = (
-            "Source tweet(s) below. Produce a single aixbt-style post that captures the alpha. "
+            "Source item(s) below (could be a tweet or a news headline+summary). "
+            "Produce a single aixbt-style post that captures the alpha. "
             f"Hard cap: {max_length} characters.\n\n---\n" + "\n---\n".join(lines)
         )
         log.debug("LLM input: %s", user_msg)
