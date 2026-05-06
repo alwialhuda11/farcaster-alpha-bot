@@ -1,0 +1,71 @@
+name: post-cast
+
+on:
+  schedule:
+    # Every hour at :17 (random-ish minute to dodge GH Actions cron contention).
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force a post (skip probability gate)"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Dry run (don't actually post)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write  # so the workflow can commit data/posted.json
+
+concurrency:
+  group: post-cast
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Run bot
+        env:
+          NEYNAR_API_KEY: ${{ secrets.NEYNAR_API_KEY }}
+          NEYNAR_SIGNER_UUID: ${{ secrets.NEYNAR_SIGNER_UUID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o-mini' }}
+          TWITTER_SOURCE: ${{ vars.TWITTER_SOURCE || 'xcancel' }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          APIFY_ACTOR_ID: ${{ vars.APIFY_ACTOR_ID || 'apidojo/tweet-scraper' }}
+          FARCASTER_CHANNEL_ID: ${{ vars.FARCASTER_CHANNEL_ID }}
+          POST_PROBABILITY: ${{ vars.POST_PROBABILITY || '0.5' }}
+          ACTIVE_HOURS_START_UTC: ${{ vars.ACTIVE_HOURS_START_UTC || '2' }}
+          ACTIVE_HOURS_END_UTC: ${{ vars.ACTIVE_HOURS_END_UTC || '20' }}
+          MIN_LENGTH: ${{ vars.MIN_LENGTH || '80' }}
+          MAX_LENGTH: ${{ vars.MAX_LENGTH || '320' }}
+          LOOKBACK_HOURS: ${{ vars.LOOKBACK_HOURS || '24' }}
+        run: |
+          set -e
+          ARGS="-v"
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then ARGS="$ARGS --force"; fi
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          python -m src.main $ARGS
+
+      - name: Commit updated state
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          if [ -n "$(git status --porcelain data/posted.json)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/posted.json
+            git commit -m "chore(state): update posted ids [skip ci]"
+            git push
+          fi
