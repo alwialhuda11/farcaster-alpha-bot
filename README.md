@@ -1,7 +1,7 @@
 # Farcaster Alpha Bot
 
 Auto-post crypto alpha to your Farcaster account.
-Source: list of crypto Twitter accounts you choose. Style: like [@aixbt_agent](https://x.com/aixbt_agent) — short, lowercase, observational, ticker-aware.
+Default source: crypto news RSS feeds (CoinDesk, Decrypt, The Block, Cointelegraph, The Defiant, CryptoSlate). Optional Twitter sources via Apify or xcancel. Style: like [@aixbt_agent](https://x.com/aixbt_agent) — short, lowercase, observational, ticker-aware.
 
 > **Persona**: lowercase, no hashtags, no emojis, references `$TICKER`s and concrete numbers. The LLM is instructed to never invent numbers and to return `SKIP` if the source has no real alpha.
 
@@ -10,11 +10,11 @@ Source: list of crypto Twitter accounts you choose. Style: like [@aixbt_agent](h
 ## Cara kerja singkat
 
 1. **GitHub Actions** trigger setiap jam (cron `17 * * * *`).
-2. Bot ambil tweet terbaru dari list akun di `config/accounts.yml` (default: 24 jam terakhir).
-3. Tweet yang belum pernah diposting di-filter, dipilih 1 yang paling fresh (random tiebreak top-3).
+2. Bot ambil item terbaru dari sumber di `config/accounts.yml` — default `feeds:` (RSS news), opsional `accounts:` (Twitter handles via apify/xcancel).
+3. Item yang belum pernah diposting di-filter, dipilih 1 yang paling fresh (random tiebreak top-3).
 4. **OpenAI `gpt-4o-mini`** rewrite jadi single post a la aixbt_agent.
 5. Hasilnya di-post ke Farcaster lewat **Neynar API**.
-6. State (id tweet yang udah dipost) disimpan di `data/posted.json` dan di-commit balik ke repo.
+6. State (id item yang udah dipost) disimpan di `data/posted.json` dan di-commit balik ke repo.
 
 Frekuensi posting dikontrol pakai 2 hal:
 - **Active hours** (`ACTIVE_HOURS_START_UTC` & `_END_UTC`): di luar jam ini, tick di-skip total.
@@ -48,44 +48,61 @@ gh repo create my-farcaster-alpha-bot --private --source=. --push
 1. https://platform.openai.com/api-keys → Create new secret key.
 2. Default model: `gpt-4o-mini` (~$0.15/1M input, $0.60/1M output). Estimasi biaya: < $1/bulan untuk 10 post/hari.
 
-### 4. Twitter source
+### 4. Pilih content source
 
-Bot punya 3 source pluggable. Pilih salah satu:
+Bot punya 4 source pluggable. **Default & rekomendasi: `news_rss`** (gratis, reliable, gak butuh API key tambahan).
 
-#### a) `apify` ⭐ **RECOMMENDED untuk GitHub Actions** (~$5/bulan free credits = ~12k tweets/bulan)
+#### a) `news_rss` ⭐ **DEFAULT — gratis, reliable**
 
-Reliable dari IP manapun (termasuk runner GitHub Actions yang IP-nya berubah-ubah).
+Membaca dari list RSS crypto news (CoinDesk, Decrypt, The Block, Cointelegraph, The Defiant, CryptoSlate). LLM rewrite jadi observasi pendek a la aixbt_agent.
 
-1. Sign up di https://apify.com → Settings → Integrations → API → copy token → simpan sebagai `APIFY_TOKEN` di GitHub Secrets.
+- Tidak butuh API tambahan apapun.
+- Reliable dari IP manapun (RSS publik).
+- Update real-time (rata-rata 100+ artikel/hari di 6 sumber).
+- Edit list feed di `config/accounts.yml` di section `feeds:`.
+
+#### b) `apify` (Twitter source — butuh paid Apify plan)
+
+⚠️ Apify Free plan **tidak bisa pakai API** untuk apidojo's Twitter actors (return error "You cannot use the API with the Free Plan"). Butuh upgrade ke **Apify Starter ($29/bulan)** untuk pakai source ini.
+
+Kalau udah upgrade:
+1. Apify Console → Settings → Integrations → API → copy token → simpan sebagai `APIFY_TOKEN`.
 2. Set repo variable `TWITTER_SOURCE=apify`.
-3. Default actor: `apidojo/tweet-scraper` (~$0.4/1k tweets). Free credits ($5/bulan) = ~12k tweets, jauh lebih dari cukup untuk 10 post/hari.
+3. Default actor: `apidojo/tweet-scraper` ($0.40/1k tweets).
 
-#### b) `xcancel` (gratis tapi butuh whitelist; cocok untuk run di server fixed-IP)
+#### c) `xcancel` (Twitter source — gratis, butuh whitelist + fixed IP)
 
-⚠️ **Limitasi penting**: xcancel.com whitelist diikat ke IP yang dipakai. GitHub Actions runner pakai IP yang berubah-ubah tiap run, jadi praktis xcancel **tidak bisa dipakai di GitHub Actions**. Source ini cuma cocok kalau kamu run bot di VPS sendiri (cron) atau server lokal yang IP-nya tetap.
+⚠️ xcancel.com whitelist diikat ke IP. GitHub Actions runner IP-nya berubah-ubah → **praktis tidak bisa dipakai di GitHub Actions**. Cuma cocok kalau host bot di VPS dengan IP tetap.
 
-Kalau setup di fixed-IP server:
-1. Run `python -m src.main -vv --dry-run --force --any-time` di server-nya (sekali aja).
-2. Logs akan kasih token whitelist (32+ hex chars).
-3. Email **`rss [AT] xcancel [DOT] com`** dengan token tsb dan minta whitelist.
-4. Tunggu beberapa jam sampai whitelisted, terus jalankan bot beneran.
+Kalau di fixed-IP server:
+1. Run `python -m src.main -vv --dry-run --force --any-time` (sekali).
+2. Logs kasih token whitelist (32+ hex).
+3. Email **`rss [AT] xcancel [DOT] com`** dengan token, minta whitelist.
+4. Tunggu beberapa jam, jalankan bot.
 
-#### c) `fixture` (testing only)
+#### d) `fixture` (testing only)
 
-Set `TWITTER_SOURCE=fixture` & edit `data/fixture_tweets.json`. Bot akan baca dari file tsb. Berguna buat dry-run testing tanpa network.
+Set `TWITTER_SOURCE=fixture`, edit `data/fixture_tweets.json`. Berguna buat dry-run testing offline.
 
-> **TLDR**: kalau pakai GitHub Actions (default plan kita), pilih **`apify`**. Kalau punya VPS sendiri, boleh `xcancel` setelah whitelist.
+### 5. Edit feeds (kalau pakai default `news_rss`)
 
-### 5. Edit list akun
+`config/accounts.yml` di section `feeds:` — tambah/hapus RSS yang kamu mau:
 
-`config/accounts.yml` → tulis username-nya (tanpa `@`):
+```yaml
+feeds:
+  - { name: coindesk, url: "https://www.coindesk.com/arc/outboundfeeds/rss/" }
+  - { name: decrypt, url: "https://decrypt.co/feed" }
+  - { name: theblock, url: "https://www.theblock.co/rss.xml" }
+  # tambah lagi sesuai selera
+```
+
+Kalau pakai `xcancel` / `apify`, edit section `accounts:` (Twitter handles tanpa `@`):
 
 ```yaml
 accounts:
   - aixbt_agent
   - cobie
   - 0xMert_
-  - DeFi_Dad
 ```
 
 ### 6. Set GitHub Actions secrets & variables
@@ -103,7 +120,7 @@ Di repo settings → **Secrets and variables** → **Actions**:
 **Variables** (non-sensitive, optional — semua punya default):
 | Name | Default | Description |
 | --- | --- | --- |
-| `TWITTER_SOURCE` | `xcancel` | `xcancel` / `apify` / `fixture` |
+| `TWITTER_SOURCE` | `news_rss` | `news_rss` (default) / `apify` / `xcancel` / `fixture` |
 | `OPENAI_MODEL` | `gpt-4o-mini` | bisa diganti `gpt-4o` kalau mau hasil lebih bagus |
 | `FARCASTER_CHANNEL_ID` | (kosong) | mis. `alpha`, `crypto` — kalau mau post ke channel tertentu |
 | `POST_PROBABILITY` | `0.5` | 0.0-1.0, tinggiin kalo mau lebih sering posting |
@@ -155,10 +172,11 @@ src/
 ├── llm_rewriter.py      # OpenAI gpt-4o-mini -> aixbt-style cast
 ├── farcaster_client.py  # Neynar publish_cast wrapper
 └── sources/
-    ├── base.py          # Tweet dataclass + TwitterSource ABC
-    ├── xcancel_source.py # Nitter RSS via xcancel.com
-    ├── apify_source.py  # Apify actor scraper
-    └── fixture_source.py # local JSON for testing
+    ├── base.py             # Tweet dataclass + TwitterSource ABC
+    ├── news_rss_source.py  # crypto news RSS feeds (default)
+    ├── xcancel_source.py   # Nitter RSS via xcancel.com
+    ├── apify_source.py     # Apify actor scraper
+    └── fixture_source.py   # local JSON for testing
 ```
 
 ---
@@ -180,8 +198,8 @@ Edit `SYSTEM_PROMPT` di `src/llm_rewriter.py`. Kalau mau persona beda (mis. lebi
 **Bot post-nya jelek / mirip aslinya banget**
 → Naikin `POST_PROBABILITY` lebih rendah dan tighten prompt di `llm_rewriter.py`. Bisa juga ganti model ke `gpt-4o` (`OPENAI_MODEL=gpt-4o`).
 
-**`No tweets fetched` di logs**
-→ Kalau pakai `xcancel`, kemungkinan belum di-whitelist. Cek logs untuk token, email ke xcancel.
+**`No items fetched` di logs**
+→ Kalau pakai `news_rss`, cek koneksi internet runner-nya. Kalau pakai `xcancel`, kemungkinan belum di-whitelist (cek logs untuk token, email ke xcancel). Kalau pakai `apify`, cek apakah plan kamu paid (free plan API blocked).
 
 **Neynar error 403/401**
 → `NEYNAR_SIGNER_UUID` belum di-approve. Cek dashboard Neynar → Signers → status `pending_approval` vs `approved`.

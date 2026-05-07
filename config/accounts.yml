@@ -1,5 +1,18 @@
-# Twitter accounts to mirror (case-insensitive, no @).
-# Edit this file to add/remove accounts. Commit to apply.
+# Sources for the bot. Edit this file to customize. Commit to apply.
+
+# Crypto news RSS feeds for the `news_rss` source (default & recommended).
+# Each entry: { name: <short label>, url: <RSS URL> }
+# The bot will fetch all feeds and pick the freshest items.
+feeds:
+  - { name: coindesk, url: "https://www.coindesk.com/arc/outboundfeeds/rss/" }
+  - { name: decrypt, url: "https://decrypt.co/feed" }
+  - { name: theblock, url: "https://www.theblock.co/rss.xml" }
+  - { name: cointelegraph, url: "https://cointelegraph.com/rss" }
+  - { name: thedefiant, url: "https://thedefiant.io/api/feed" }
+  - { name: cryptoslate, url: "https://cryptoslate.com/feed/" }
+
+# Twitter accounts to mirror — only used by the `xcancel` / `apify` sources.
+# Case-insensitive, no leading "@".
 accounts:
   - aixbt_agent
   - cobie

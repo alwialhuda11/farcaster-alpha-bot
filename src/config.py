@@ -55,8 +55,10 @@ class Config:
     lookback_hours: int
     dry_run: bool
 
-    # Accounts
+    # Accounts (used by xcancel / apify sources)
     accounts: list[str] = field(default_factory=list)
+    # News feeds (used by news_rss source). Each entry: (name, url).
+    feeds: list[tuple[str, str]] = field(default_factory=list)
 
     @classmethod
     def load(cls, repo_root: Path | None = None) -> Config:
@@ -64,10 +66,16 @@ class Config:
         repo_root = repo_root or Path(__file__).resolve().parents[1]
         accounts_file = repo_root / "config" / "accounts.yml"
         accounts: list[str] = []
+        feeds: list[tuple[str, str]] = []
         if accounts_file.exists():
             with accounts_file.open("r", encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
             accounts = [str(a).strip().lstrip("@") for a in data.get("accounts", []) if a]
+            for entry in data.get("feeds", []) or []:
+                if isinstance(entry, dict) and entry.get("url"):
+                    feeds.append(
+                        (str(entry.get("name") or entry["url"]).strip(), str(entry["url"]).strip())
+                    )
 
         return cls(
             neynar_api_key=os.getenv("NEYNAR_API_KEY", "").strip(),
@@ -75,7 +83,7 @@ class Config:
             farcaster_channel_id=(os.getenv("FARCASTER_CHANNEL_ID", "").strip() or None),
             openai_api_key=os.getenv("OPENAI_API_KEY", "").strip(),
             openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini",
-            twitter_source=os.getenv("TWITTER_SOURCE", "xcancel").strip().lower() or "xcancel",
+            twitter_source=os.getenv("TWITTER_SOURCE", "news_rss").strip().lower() or "news_rss",
             apify_token=(os.getenv("APIFY_TOKEN", "").strip() or None),
             apify_actor_id=os.getenv("APIFY_ACTOR_ID", "apidojo/tweet-scraper").strip(),
             post_probability=_float("POST_PROBABILITY", 0.5),
@@ -86,6 +94,7 @@ class Config:
             lookback_hours=_int("LOOKBACK_HOURS", 24),
             dry_run=_bool("DRY_RUN", False),
             accounts=accounts,
+            feeds=feeds,
         )
 
     def require_posting_creds(self) -> None:
@@ -102,3 +111,7 @@ class Config:
                 f"Missing required env vars: {', '.join(missing)}. "
                 "See .env.example for the full list."
             )
+
+    def needs_accounts(self) -> bool:
+        """True only for sources that scrape Twitter accounts."""
+        return self.twitter_source in ("xcancel", "apify")

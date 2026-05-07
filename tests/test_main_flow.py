@@ -43,7 +43,7 @@ def test_dry_run_e2e(repo_env, monkeypatch, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert "watching $HYPE" in out
-    assert "SOURCE @" in out
+    assert "SOURCE [" in out
 
 
 def test_skip_when_llm_returns_skip(repo_env, monkeypatch):
