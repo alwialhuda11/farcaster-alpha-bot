@@ -28,15 +28,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check for required secrets
+        id: check_secrets
+        env:
+          NEYNAR_API_KEY: ${{ secrets.NEYNAR_API_KEY }}
+          NEYNAR_SIGNER_UUID: ${{ secrets.NEYNAR_SIGNER_UUID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          missing=""
+          [ -z "$NEYNAR_API_KEY" ] && missing="$missing NEYNAR_API_KEY"
+          [ -z "$NEYNAR_SIGNER_UUID" ] && missing="$missing NEYNAR_SIGNER_UUID"
+          [ -z "$OPENAI_API_KEY" ] && missing="$missing OPENAI_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "::warning::Skipping run; missing secrets:$missing. Add them in Settings -> Secrets and variables -> Actions."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-python@v5
+        if: steps.check_secrets.outputs.skip != 'true'
         with:
           python-version: "3.11"
           cache: pip
 
       - name: Install deps
+        if: steps.check_secrets.outputs.skip != 'true'
         run: pip install -r requirements.txt
 
       - name: Run bot
+        if: steps.check_secrets.outputs.skip != 'true'
         env:
           NEYNAR_API_KEY: ${{ secrets.NEYNAR_API_KEY }}
           NEYNAR_SIGNER_UUID: ${{ secrets.NEYNAR_SIGNER_UUID }}
@@ -60,7 +81,7 @@ jobs:
           python -m src.main $ARGS
 
       - name: Commit updated state
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ steps.check_secrets.outputs.skip != 'true' && github.event.inputs.dry_run != 'true' }}
         run: |
           if [ -n "$(git status --porcelain data/posted.json)" ]; then
             git config user.name "github-actions[bot]"
