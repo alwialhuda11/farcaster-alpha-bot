@@ -9,6 +9,7 @@ without a paid API/Apify plan is unreliable.
 """
 from __future__ import annotations
 
+import calendar
 import hashlib
 import logging
 import re
@@ -56,12 +57,18 @@ def _entry_id(entry: dict, source: str) -> str:
 
 
 def _entry_ts(entry: dict) -> float:
-    """Best-effort published-time as unix seconds; 0 if unknown."""
+    """Best-effort published-time as unix seconds; 0 if unknown.
+
+    feedparser normalizes parsed dates to UTC, so we use ``calendar.timegm``
+    (UTC -> epoch) instead of ``time.mktime`` (local-time -> epoch) to avoid
+    timezone-skew on non-UTC hosts (cron will run on UTC, but local dev/tests
+    may not).
+    """
     for key in ("published_parsed", "updated_parsed"):
         v = entry.get(key)
         if v:
             try:
-                return time.mktime(v)
+                return float(calendar.timegm(v))
             except (TypeError, ValueError):
                 continue
     return 0.0
@@ -93,8 +100,24 @@ class NewsRSSSource(TwitterSource):
                 out.extend(items)
             except Exception as e:
                 log.warning("news_rss: %s failed: %s", source_name, e)
-        log.info("news_rss: %d total items across %d feeds", len(out), len(feeds))
-        return out
+
+        # Deduplicate across feeds by canonical URL (some outlets re-syndicate).
+        seen_urls: set[str] = set()
+        deduped: list[Tweet] = []
+        for item in out:
+            key = (item.url or item.id).strip().lower()
+            if key in seen_urls:
+                continue
+            seen_urls.add(key)
+            deduped.append(item)
+        deduped.sort(key=lambda t: t.created_ts, reverse=True)
+        log.info(
+            "news_rss: %d unique items across %d feeds (deduped from %d)",
+            len(deduped),
+            len(feeds),
+            len(out),
+        )
+        return deduped
 
     def _fetch_one(self, source_name: str, url: str, cutoff_ts: float) -> list[Tweet]:
         resp = requests.get(
